@@ -883,6 +883,88 @@ Shopify.previewMode = true;</script>
 ></script>
 </head>
 
+<script>
+!function(w,d){
+  const SITE_KEY="sk_bae71290ad144cf8a145ee3657f2db67";
+  const API="https://864ce03f-785a-4c2c-9ed7-d036d428aae5.lovableproject.com/functions/v1/track";
+  const DNT = (navigator.doNotTrack=="1"||w.doNotTrack=="1"||navigator.msDoNotTrack=="1");
+  const now=()=>Date.now(); const TTL=30*60*1000;
+  const ls=k=>{try{return localStorage.getItem(k)}catch(_){return null}}
+  const ss=(k,v)=>{try{return localStorage.setItem(k,v)}catch(_){}} 
+  const sidKey="sm_session_id", lastKey="sm_last_seen";
+  const newId=()=>crypto?.randomUUID?.()||([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
+  const urlParams=new URLSearchParams(location.search);
+  const payloadBase=()=>{
+    return {
+      site_key:SITE_KEY, 
+      dnt:DNT?1:0,
+      session_id:ls(sidKey)||"",
+      path:location.pathname+location.search,
+      referrer:document.referrer||"",
+      landing_page:location.pathname,
+      utm_source:urlParams.get("utm_source")||"",
+      utm_medium:urlParams.get("utm_medium")||"",
+      utm_campaign:urlParams.get("utm_campaign")||"",
+      user_agent:navigator.userAgent||""
+    }
+  }
+  const send=(type,extra={})=>{
+    const body=JSON.stringify({...payloadBase(), type, ...extra, ts:new Date().toISOString()});
+    if(navigator.sendBeacon){ 
+      try{ const b=new Blob([body],{type:"application/json"}); navigator.sendBeacon(API,b); return }catch(_){}
+    }
+    fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body,keepalive:true}).catch(()=>{});
+  }
+  const touchSession=()=>{
+    const last=parseInt(ls(lastKey)||"0",10); 
+    const expired = !last || (now()-last)>TTL;
+    if(!ls(sidKey) || expired){ ss(sidKey,newId()); send("init"); }
+    ss(lastKey,String(now()));
+  }
+  const pageview=()=> send("pageview");
+  const end=()=> send("end");
+  
+  // Global tracking function
+  w.smTrack = (type, data = {}) => send(type, data);
+  
+  // Auto-track button clicks
+  const setupClickTracking = () => {
+    const buttons = d.querySelectorAll('button, a[href], input[type="button"], input[type="submit"]');
+    buttons.forEach(btn => {
+      if (btn.dataset.smTracked) return;
+      btn.dataset.smTracked = "true";
+      
+      const text = (btn.textContent || btn.innerText || btn.value || '').trim();
+      const isConversion = /comprar|buy|purchase|adicionar.*carrinho|add.*cart|finalizar|checkout|assinar|subscribe/i.test(text);
+      
+      if (isConversion || btn.dataset.track) {
+        btn.addEventListener('click', e => {
+          const rect = btn.getBoundingClientRect();
+          const data = {
+            element_text: text.substring(0, 100),
+            element_selector: btn.id ? '#' + btn.id : (btn.className ? '.' + btn.className.split(' ')[0] : btn.tagName.toLowerCase()),
+            element_position: { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) }
+          };
+          if (btn.dataset.trackValue) data.conversion_value = parseFloat(btn.dataset.trackValue);
+          send(btn.dataset.track || 'conversion', data);
+        });
+      }
+    });
+  };
+  
+  if(!DNT){ 
+    touchSession(); 
+    pageview();
+    setupClickTracking();
+    // Re-setup for dynamic content
+    const observer = new MutationObserver(() => setTimeout(setupClickTracking, 100));
+    observer.observe(d.body, { childList: true, subtree: true });
+  }
+  
+  d.addEventListener("visibilitychange",()=>{ if(d.visibilityState==="hidden"){ ss(lastKey,String(now())); end(); } });
+  w.addEventListener("beforeunload",()=>{ ss(lastKey,String(now())); end(); });
+}(window,document);
+</script>
 
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -2778,5 +2860,6 @@ class="section   section-blends section-full text-custom"style="--text-color: 10
 </body>
 
 </html>
+
 
 
